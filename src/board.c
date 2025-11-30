@@ -418,16 +418,27 @@ int load_level(board_t *board, int points) {
 }
 
 char* read_file_content(const char* filename) {
+    // Imprime o que está a tentar abrir para debug
+    // debug("Tentando abrir: [%s]\n", filename); 
+    
     int fd = open(filename, O_RDONLY);
     if (fd < 0) {
-        perror("Erro ao abrir ficheiro"); 
+        // ISTO É O IMPORTANTE: Vai escrever no terminal por que razão falhou
+        fprintf(stderr, "ERRO CRÍTICO: Não foi possível abrir o ficheiro '%s'.\n", filename);
+        perror("Detalhe do erro"); 
         return NULL; 
     }
-    char *buffer = malloc(4096); 
-    if (!buffer) { close(fd); return NULL; }
+    
+    // Alocação segura
+    char *buffer = calloc(4096, sizeof(char)); 
+    if (!buffer) { 
+        close(fd); 
+        return NULL; 
+    }
 
     int bytes_lidos = read(fd, buffer, 4095);
     if (bytes_lidos <= 0) { 
+        fprintf(stderr, "AVISO: Ficheiro '%s' está vazio ou erro na leitura.\n", filename);
         free(buffer); 
         close(fd); 
         return NULL; 
@@ -452,10 +463,26 @@ int is_valid_pos(board_t *board, int x, int y) {
     return 1;
 }
 
-int load_pacman_filename(board_t *board, const char* filename, int index){
-    char *buffer = read_file_content(filename);
-    if (!buffer) return 1;
+// Em src/board.c
 
+int load_pacman_filename(board_t *board, const char* filename, int index){
+    // Tenta ler o ficheiro
+    char *buffer = read_file_content(filename);
+
+    // SE O FICHEIRO NÃO EXISTIR -> USA A FUNÇÃO JÁ EXISTENTE
+    if (!buffer) {
+        debug("Ficheiro '%s' nao encontrado. Usando load_pacman default.\n", filename);
+        
+        // A função load_pacman (definida mais acima em board.c)
+        // coloca o pacman na posição (1,1), define alive=1 e configura o content='P' no tabuleiro.
+        // Passamos 0 pontos porque a main.c vai atualizar os pontos logo a seguir.
+        load_pacman(board, 0);
+
+        return 0; // Sucesso
+    }
+
+    // --- SE O FICHEIRO EXISTIR, LÓGICA DE LEITURA (IGUAL A ANTES) ---
+    
     char *saveptr; 
     char *linha = strtok_r(buffer, "\n", &saveptr);
     
@@ -477,7 +504,12 @@ int load_pacman_filename(board_t *board, const char* filename, int index){
                 if(sscanf(linha, "POS %d %d", &y, &x) == 2){
                     p->pos_x = x;
                     p->pos_y = y;
-                    if(is_valid_pos(board, x, y)){board->board[y * board->width + x].content = 'P';}
+                    if(is_valid_pos(board, x, y)){
+                        // Limpa o ponto se existir, para não ficar 'P' em cima de um '.'
+                        int idx = y * board->width + x;
+                        board->board[idx].content = 'P';
+                        board->board[idx].has_dot = 0; 
+                    }
                 }
             }
             else {
@@ -635,15 +667,20 @@ int load_level_filename(board_t *board, const char *filename) {
                         int index = (current_row * board->width) + x;
                         char char_lido = linha[x];
                         
+                        char conteudo_atual = board->board[index].content;
+
                         if (char_lido == 'X') {
                             board->board[index].content = 'W'; 
                         } 
                         else if (char_lido == '@') {
-                            board->board[index].content = ' ';
+                            if (conteudo_atual != 'P' && conteudo_atual != 'M')
+                                board->board[index].content = ' ';
                             board->board[index].has_portal = 1;
                         } 
-                        else{
-                            board->board[index].content = ' '; 
+                        else {
+                            if (conteudo_atual != 'P' && conteudo_atual != 'M') {
+                                board->board[index].content = ' '; 
+                            }
                             board->board[index].has_dot = 1;
                         }
                     }
