@@ -1,8 +1,10 @@
 #include "board.h"
 #include "display.h"
 #include <stdlib.h>
+#include <dirent.h>
 #include <time.h>
 #include <unistd.h>
+#include <string.h>
 
 #define CONTINUE_PLAY 0
 #define NEXT_LEVEL 1
@@ -65,6 +67,49 @@ int play_board(board_t * game_board) {
     }      
 
     return CONTINUE_PLAY;  
+}
+
+
+
+// Função auxiliar para verificar a extensão .lvl
+int has_extension(const char *filename, const char *ext) {
+    const char *dot = strrchr(filename, '.');
+    if (!dot || dot == filename) return 0;
+    return (strcmp(dot, ext) == 0);
+}
+
+// Função de comparação para o qsort (ordem alfabética)
+int compare_levels(const void *a, const void *b) {
+    return strcmp((const char *)a, (const char *)b);
+}
+
+// Preenche a matriz 'lista' com os nomes dos ficheiros e retorna quantos encontrou
+int encontrar_niveis(const char *dirpath, char lista[MAX_LEVELS][MAX_FILENAME]) {
+    DIR *dirp = opendir(dirpath);
+    if (dirp == NULL) {
+        perror("Erro ao abrir diretoria");
+        return 0;
+    }
+
+    struct dirent *dp;
+    int count = 0;
+
+    while ((dp = readdir(dirp)) != NULL) {
+        // Ignorar . e ..
+        if (strcmp(dp->d_name, ".") == 0 || strcmp(dp->d_name, "..") == 0)
+            continue;
+
+        // Se for .lvl e houver espaço no array
+        if (has_extension(dp->d_name, ".lvl") && count < MAX_LEVELS) {
+            // CÓPIA SEGURA DA STRING (A correção do teu erro)
+            strncpy(lista[count], dp->d_name, MAX_FILENAME - 1);
+            lista[count][MAX_FILENAME - 1] = '\0'; // Garantir null-terminator
+            count++;
+        }
+    }
+    closedir(dirp);
+    
+    return count;
 }
 
 int main(int argc, char** argv) {

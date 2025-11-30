@@ -464,7 +464,7 @@ int load_pacman_filename(board_t *board, const char* filename, int index){
     p->points = 0;
 
     while(linha != NULL){
-        if(linha[0] != "#"){
+        if(linha[0] != '#'){
             if(strncmp(linha, "PASSO", 5) == 0){
                 int passo;
                 if(sscanf(linha, "PASSO %d", &passo) == 1){
@@ -477,10 +477,27 @@ int load_pacman_filename(board_t *board, const char* filename, int index){
                 if(sscanf(linha, "POS %d %d", &y, &x) == 2){
                     p->pos_x = x;
                     p->pos_y = y;
-                    if(is_valid_pos(board, x, y)){board->board[y * board->width + x].content = "P";}
+                    if(is_valid_pos(board, x, y)){board->board[y * board->width + x].content = 'P';}
                 }
             }
-            //terminar as ultimas linhas de comando
+            else {
+                if (p->n_moves < MAX_MOVES) {
+                    char cmd;
+                    int turns = 1; 
+                    if (sscanf(linha, "T%d", &turns) == 1) {
+                        cmd = 'T';
+                    }
+                    else {
+                        sscanf(linha, "%c", &cmd);
+                    }
+
+                    p->moves[p->n_moves].command = cmd;
+                    p->moves[p->n_moves].turns = turns;
+                    p->moves[p->n_moves].turns_left = turns;
+                    
+                    p->n_moves++;
+                }
+            }
         }
         linha = strtok_r(NULL, "\n", &saveptr);
     }
@@ -496,8 +513,54 @@ int load_ghost_filename(board_t *board, const char* filename, int index){
     char *linha = strtok_r(buffer, "\n", &saveptr);
 
     ghost_t *g = &board->ghosts[index];
-    
-    //terminar istooo
+
+    g->n_moves = 0;
+    g->current_move = 0;
+    g->waiting = 0;
+    g->charged = 0;
+
+    while(linha != NULL){
+        if(linha[0] != '#' && strlen(linha) > 0){
+            
+            if(strncmp(linha, "PASSO", 5) == 0){
+                int passo;
+                if(sscanf(linha, "PASSO %d", &passo) == 1){
+                    g->passo = passo;
+                    g->waiting = passo;
+                }
+            }
+            else if (strncmp(linha, "POS", 3) == 0){
+                int x, y;
+                if(sscanf(linha, "POS %d %d", &y, &x) == 2){
+                    g->pos_x = x;
+                    g->pos_y = y;
+                    if(is_valid_pos(board, x, y)){
+                        board->board[y * board->width + x].content = 'M';
+                    }
+                }
+            }
+            else {
+                if (g->n_moves < MAX_MOVES) {
+                    char cmd;
+                    int turns = 1; 
+                    if (sscanf(linha, "T%d", &turns) == 1) {
+                        cmd = 'T';
+                    }
+                    else {
+                        sscanf(linha, "%c", &cmd);
+                    }
+                    g->moves[g->n_moves].command = cmd;
+                    g->moves[g->n_moves].turns = turns;
+                    g->moves[g->n_moves].turns_left = turns;
+                    
+                    g->n_moves++;
+                }
+            }
+        }
+        linha = strtok_r(NULL, "\n", &saveptr);
+    }
+    free(buffer);
+    return 0;
 }
 
 
