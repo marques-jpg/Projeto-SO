@@ -438,6 +438,20 @@ char* read_file_content(const char* filename) {
     return buffer;
 }
 
+int is_valid_pos(board_t *board, int x, int y) {
+    if (!board || !board->board) return 0;
+
+    // Check bounds
+    if (!is_valid_position(board, x, y)) return 0;
+
+    int idx = y * board->width + x;
+    char pos = board->board[idx].content;
+
+    if (pos == 'W' || pos == 'M' || pos == 'P') return 0;
+
+    return 1;
+}
+
 int load_pacman_filename(board_t *board, const char* filename, int index){
     char *buffer = read_file_content(filename);
     if (!buffer) return 1;
@@ -463,32 +477,27 @@ int load_pacman_filename(board_t *board, const char* filename, int index){
                 if(sscanf(linha, "POS %d %d", &y, &x) == 2){
                     p->pos_x = x;
                     p->pos_y = y;
-                    board->board[y * board->width + x].content = "P"; //fazer função para verificar se a possição existe e se é valida
+                    if(is_valid_pos(board, x, y)){board->board[y * board->width + x].content = "P";}
                 }
             }
-            else if(linha[0] == 'A'){
-    
-            }
-            else if(linha[0] == 'D'){
-
-            }
-            else if(linha[0] == 'W'){
-
-            }
-            else if(linha[0] == 'S'){
-
-            }
-            else if(linha[0] == 'T'){
-
-            }
-            else{
-
-            }
+            //terminar as ultimas linhas de comando
         }
         linha = strtok_r(NULL, "\n", &saveptr);
     }
     free(buffer);
     return 0;
+}
+
+int load_ghost_filename(board_t *board, const char* filename, int index){
+    char *buffer = read_file_content(filename);
+    if (!buffer) return 1;
+
+    char *saveptr; 
+    char *linha = strtok_r(buffer, "\n", &saveptr);
+
+    ghost_t *g = &board->ghosts[index];
+    
+    //terminar istooo
 }
 
 
