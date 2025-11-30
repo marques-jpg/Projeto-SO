@@ -561,12 +561,6 @@ int load_ghost_filename(board_t *board, const char* filename, int index){
     g->charged = 0;
     g->passo = 0;
 
-    if (!buffer) {
-        g->moves[0].command = 'T'; 
-        g->moves[0].turns = 1;
-        g->n_moves = 1;
-        return 1;
-    }
 
     char *saveptr; 
     char *linha = strtok_r(buffer, "\n", &saveptr);
