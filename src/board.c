@@ -463,35 +463,64 @@ int is_valid_pos(board_t *board, int x, int y) {
     return 1;
 }
 
-// Em src/board.c
+int parse_move_line(char *linha, command_t *moves_array, int *n_moves) {
+    if (*n_moves >= MAX_MOVES) return 0;
 
-int load_pacman_filename(board_t *board, const char* filename, int index, int points){
-    // Tenta ler o ficheiro
-    char *buffer = read_file_content(filename);
+    char cmd = '\0';
+    int turns = 1;
 
-    // SE O FICHEIRO NÃO EXISTIR -> USA A FUNÇÃO JÁ EXISTENTE
-    if (!buffer) {
-        debug("Ficheiro '%s' nao encontrado. Usando load_pacman default.\n", filename);
-        
-        // A função load_pacman (definida mais acima em board.c)
-        // coloca o pacman na posição (1,1), define alive=1 e configura o content='P' no tabuleiro.
-        // Passamos 0 pontos porque a main.c vai atualizar os pontos logo a seguir.
-        load_pacman(board, points);
+    // Remove espaços em branco iniciais
+    while(isspace((unsigned char)*linha)) linha++;
+    if (*linha == '\0') return 0;
 
-        return 0; // Sucesso
+    // Verifica comando T (Ex: T2)
+    if (toupper(linha[0]) == 'T') {
+        cmd = 'T';
+        // Tenta ler o número após T. Se não conseguir, assume 1.
+        if (sscanf(linha + 1, "%d", &turns) != 1) {
+            turns = 1;
+        }
+    } 
+    else {
+        // Outros comandos: A, S, D, W, R, C
+        cmd = toupper(linha[0]);
     }
 
-    // --- SE O FICHEIRO EXISTIR, LÓGICA DE LEITURA (IGUAL A ANTES) ---
-    
-    char *saveptr; 
-    char *linha = strtok_r(buffer, "\n", &saveptr);
-    
+    if (cmd != '\0') {
+        moves_array[*n_moves].command = cmd;
+        moves_array[*n_moves].turns = turns;
+        moves_array[*n_moves].turns_left = turns;
+        (*n_moves)++;
+        return 1;
+    }
+    return 0;
+}
+
+int load_pacman_filename(board_t *board, const char* filename, int index, int points){
+    char *buffer = read_file_content(filename);
+
+    // Se não abrir ficheiro, assume controlo manual (n_moves = 0)
+    if (!buffer) {
+        load_pacman(board, points);
+        board->pacmans[index].n_moves = 0; 
+        return 0;
+    }
+
     pacman_t *p = &board->pacmans[index];
     p->alive = 1; 
     p->points = points;
+    p->n_moves = 0;
+    p->current_move = 0;
+    p->waiting = 0;
+    p->passo = 0; // Default
+
+    char *saveptr; 
+    char *linha = strtok_r(buffer, "\n", &saveptr);
 
     while(linha != NULL){
+        // Ignora comentários (#)
         if(linha[0] != '#'){
+            // Comando PASSO
             if(strncmp(linha, "PASSO", 5) == 0){
                 int passo;
                 if(sscanf(linha, "PASSO %d", &passo) == 1){
@@ -499,61 +528,58 @@ int load_pacman_filename(board_t *board, const char* filename, int index, int po
                     p->waiting = passo;
                 }
             }
+            // Comando POS (Linha Coluna -> Y X)
             else if (strncmp(linha, "POS", 3) == 0){
-                int x, y;
-                if(sscanf(linha, "POS %d %d", &y, &x) == 2){
-                    p->pos_x = x;
-                    p->pos_y = y;
-                    if(is_valid_pos(board, x, y)){
-                        // Limpa o ponto se existir, para não ficar 'P' em cima de um '.'
-                        int idx = y * board->width + x;
+                int l, c; // linha, coluna
+                if(sscanf(linha, "POS %d %d", &l, &c) == 2){
+                    p->pos_y = l;
+                    p->pos_x = c;
+                    // Atualiza o tabuleiro
+                    if(is_valid_pos(board, c, l)){
+                        int idx = l * board->width + c;
                         board->board[idx].content = 'P';
-                        board->board[idx].has_dot = 0; 
+                        board->board[idx].has_dot = 0; // Remove ponto se existir
                     }
                 }
             }
             else {
-                if (p->n_moves < MAX_MOVES) {
-                    char cmd;
-                    int turns = 1; 
-                    if (sscanf(linha, "T%d", &turns) == 1) {
-                        cmd = 'T';
-                    }
-                    else {
-                        sscanf(linha, "%c", &cmd);
-                    }
-
-                    p->moves[p->n_moves].command = cmd;
-                    p->moves[p->n_moves].turns = turns;
-                    p->moves[p->n_moves].turns_left = turns;
-                    
-                    p->n_moves++;
-                }
+                // Comandos de movimento (A, D, W, S, R, T...)
+                parse_move_line(linha, p->moves, &p->n_moves);
             }
         }
         linha = strtok_r(NULL, "\n", &saveptr);
     }
+    
     free(buffer);
     return 0;
 }
 
+
 int load_ghost_filename(board_t *board, const char* filename, int index){
     char *buffer = read_file_content(filename);
-    if (!buffer) return 1;
-
-    char *saveptr; 
-    char *linha = strtok_r(buffer, "\n", &saveptr);
-
+    
     ghost_t *g = &board->ghosts[index];
-
+    // Defaults seguros
     g->n_moves = 0;
     g->current_move = 0;
     g->waiting = 0;
     g->charged = 0;
+    g->passo = 0;
+
+    if (!buffer) {
+        // Se falhar a leitura, adiciona um movimento de espera para não crashar
+        g->moves[0].command = 'T'; 
+        g->moves[0].turns = 1;
+        g->n_moves = 1;
+        return 1;
+    }
+
+    char *saveptr; 
+    char *linha = strtok_r(buffer, "\n", &saveptr);
 
     while(linha != NULL){
-        if(linha[0] != '#' && strlen(linha) > 0){
-            
+        if(linha[0] != '#'){
+            // Comando PASSO
             if(strncmp(linha, "PASSO", 5) == 0){
                 int passo;
                 if(sscanf(linha, "PASSO %d", &passo) == 1){
@@ -561,36 +587,34 @@ int load_ghost_filename(board_t *board, const char* filename, int index){
                     g->waiting = passo;
                 }
             }
+            // Comando POS (Linha Coluna -> Y X)
             else if (strncmp(linha, "POS", 3) == 0){
-                int x, y;
-                if(sscanf(linha, "POS %d %d", &y, &x) == 2){
-                    g->pos_x = x;
-                    g->pos_y = y;
-                    if(is_valid_pos(board, x, y)){
-                        board->board[y * board->width + x].content = 'M';
+                int l, c;
+                if(sscanf(linha, "POS %d %d", &l, &c) == 2){
+                    g->pos_y = l;
+                    g->pos_x = c;
+                    if(is_valid_pos(board, c, l)){
+                        board->board[l * board->width + c].content = 'M';
                     }
                 }
             }
             else {
-                if (g->n_moves < MAX_MOVES) {
-                    char cmd;
-                    int turns = 1; 
-                    if (sscanf(linha, "T%d", &turns) == 1) {
-                        cmd = 'T';
-                    }
-                    else {
-                        sscanf(linha, "%c", &cmd);
-                    }
-                    g->moves[g->n_moves].command = cmd;
-                    g->moves[g->n_moves].turns = turns;
-                    g->moves[g->n_moves].turns_left = turns;
-                    
-                    g->n_moves++;
-                }
+                // Comandos de movimento
+                parse_move_line(linha, g->moves, &g->n_moves);
             }
         }
         linha = strtok_r(NULL, "\n", &saveptr);
     }
+    
+    // SEGURANÇA: Se o ficheiro não tinha movimentos, adiciona um WAIT.
+    // Isto evita divisão por zero no play_board (current_move % n_moves).
+    if (g->n_moves == 0) {
+        g->moves[0].command = 'T';
+        g->moves[0].turns = 1;
+        g->moves[0].turns_left = 1;
+        g->n_moves = 1;
+    }
+
     free(buffer);
     return 0;
 }
