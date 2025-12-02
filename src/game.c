@@ -6,6 +6,9 @@
 #include <unistd.h>
 #include <string.h>
 #include <stdio.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #define CONTINUE_PLAY 0
 #define NEXT_LEVEL 1
@@ -59,6 +62,46 @@ int play_board(board_t * game_board) {
     if (pacman->n_moves == 0) { // Controlo manual
         command_t c; 
         c.command = get_input();
+
+        if (c.command == 'G') {
+            if (game_board->save_active == 0) {
+                game_board->save_active = 1; 
+
+                pid_t pid = fork();
+
+                if (pid < 0) {
+                    perror("Erro ao guardar o jogo");
+                    game_board->save_active = 0;
+                } 
+                else if (pid > 0) {
+                    int status;
+                    while (1) {
+                        waitpid(pid, &status, 0);
+
+                        if (WIFEXITED(status)) {
+                            if (WEXITSTATUS(status) == 55) {
+                                pid_t new_pid = fork();
+                                if (new_pid == 0) {
+                                    break;
+                                } else if (new_pid > 0) {
+                                    pid = new_pid;
+                                } else {
+                                    perror("Erro ao restaurar jogo");
+                                    exit(1);
+                                }
+                            } else {
+                                exit(WEXITSTATUS(status));
+                            }
+                        } else {
+                            exit(1);
+                        }
+                    }
+                    c.command = '\0'; 
+                    return CONTINUE_PLAY; 
+                }
+            }
+        }
+
         if(c.command == '\0') return CONTINUE_PLAY;
         c.turns = 1;
         play = &c;
@@ -111,12 +154,17 @@ int main(int argc, char** argv) {
     int accumulated_points = 0;
     bool game_over = false;
 
+    // [ALTERAÇÃO 1] Variável para manter o estado do save entre níveis
+    int global_save_active = 0;
 
     for (int i = 0; i < n_niveis; i++) {
         if (game_over) break;
 
         board_t game_board = {0};
-        
+
+        // [ALTERAÇÃO 2] Inicializa o nível atual com o estado de save global
+        // Se já fizemos 'G' num nível anterior, este nível saberá que é um processo filho
+        game_board.save_active = global_save_active;
 
         if (load_level_filename(&game_board, lista_niveis[i], accumulated_points) != 0) {
              debug("Falha ao carregar nivel: %s\n", lista_niveis[i]);
@@ -132,6 +180,12 @@ int main(int argc, char** argv) {
         while(!level_complete && !game_over) {
             int result = play_board(&game_board); 
 
+            // [ALTERAÇÃO 3] Se o save foi ativado neste nível, atualiza a global
+            // para que os próximos níveis também saibam que estão em modo "save"
+            if (game_board.save_active) {
+                global_save_active = 1;
+            }
+
             if(result == NEXT_LEVEL) {
                 screen_refresh(&game_board, DRAW_WIN);
                 sleep_ms(game_board.tempo);
@@ -141,6 +195,20 @@ int main(int argc, char** argv) {
                 screen_refresh(&game_board, DRAW_GAME_OVER); 
                 sleep_ms(2000);
                 game_over = true;
+
+                // [ALTERAÇÃO 4] Lógica de saída para o processo filho
+                if (game_board.save_active) {
+                    if (!game_board.pacmans[0].alive) {
+                        // Pacman morreu: sai com 55 para o Pai restaurar
+                        close_debug_file();
+                        exit(55);
+                    } else {
+                        // Jogador fez Quit manual: sai com 0 para terminar tudo
+                        terminal_cleanup();
+                        close_debug_file();
+                        exit(0);
+                    }
+                }
             }
             else {
                 screen_refresh(&game_board, DRAW_MENU); 
