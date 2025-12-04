@@ -418,18 +418,11 @@ int load_level(board_t *board, int points) {
 }
 
 char* read_file_content(const char* filename) {
-    // Imprime o que está a tentar abrir para debug
-    // debug("Tentando abrir: [%s]\n", filename); 
-    
     int fd = open(filename, O_RDONLY);
     if (fd < 0) {
-        // ISTO É O IMPORTANTE: Vai escrever no terminal por que razão falhou
-        fprintf(stderr, "ERRO CRÍTICO: Não foi possível abrir o ficheiro '%s'.\n", filename);
-        perror("Detalhe do erro"); 
         return NULL; 
     }
     
-    // Alocação segura
     char *buffer = calloc(4096, sizeof(char)); 
     if (!buffer) { 
         close(fd); 
@@ -438,7 +431,6 @@ char* read_file_content(const char* filename) {
 
     int bytes_lidos = read(fd, buffer, 4095);
     if (bytes_lidos <= 0) { 
-        fprintf(stderr, "AVISO: Ficheiro '%s' está vazio ou erro na leitura.\n", filename);
         free(buffer); 
         close(fd); 
         return NULL; 
@@ -488,54 +480,81 @@ int parse_move_line(char *linha, command_t *moves_array, int *n_moves) {
     return 0;
 }
 
-int load_pacman_filename(board_t *board, const char* filename, int index, int points){
+int load_entity_file(board_t *board, const char* filename, int index, int is_pacman, int points) {
     char *buffer = read_file_content(filename);
 
-
     if (!buffer) {
-        load_pacman(board, points);
-        board->pacmans[index].n_moves = 0; 
+        if (is_pacman) {
+            load_pacman(board, points);
+            board->pacmans[index].n_moves = 0; 
+        }
         return 0;
     }
 
-    pacman_t *p = &board->pacmans[index];
-    p->alive = 1; 
-    p->points = points;
-    p->n_moves = 0;
-    p->current_move = 0;
-    p->waiting = 0;
-    p->passo = 0;
+    int *e_passo, *e_pos_x, *e_pos_y, *e_n_moves, *e_waiting;
+    command_t *e_moves;
+
+    if (is_pacman) {
+        pacman_t *p = &board->pacmans[index];
+        p->alive = 1; 
+        p->points = points;
+        p->current_move = 0;
+        
+        e_passo = &p->passo;
+        e_waiting = &p->waiting;
+        e_pos_x = &p->pos_x;
+        e_pos_y = &p->pos_y;
+        e_n_moves = &p->n_moves;
+        e_moves = p->moves;
+    } else {
+        ghost_t *g = &board->ghosts[index];
+        g->charged = 0;
+        g->current_move = 0;
+        
+        e_passo = &g->passo;
+        e_waiting = &g->waiting;
+        e_pos_x = &g->pos_x;
+        e_pos_y = &g->pos_y;
+        e_n_moves = &g->n_moves;
+        e_moves = g->moves;
+    }
+    
+    *e_n_moves = 0;
+    *e_waiting = 0;
+    *e_passo = 0;
 
     char *saveptr; 
     char *linha = strtok_r(buffer, "\n", &saveptr);
 
     while(linha != NULL){
-
         if(linha[0] != '#'){
 
             if(strncmp(linha, "PASSO", 5) == 0){
-                int passo;
-                if(sscanf(linha, "PASSO %d", &passo) == 1){
-                    p->passo = passo;
-                    p->waiting = passo;
+                int passo_val;
+                if(sscanf(linha, "PASSO %d", &passo_val) == 1){
+                    *e_passo = passo_val;
+                    *e_waiting = passo_val;
                 }
             }
-
             else if (strncmp(linha, "POS", 3) == 0){
                 int l, c;
                 if(sscanf(linha, "POS %d %d", &l, &c) == 2){
-                    p->pos_y = l;
-                    p->pos_x = c;
+                    *e_pos_y = l;
+                    *e_pos_x = c;
 
                     if(is_valid_pos(board, c, l)){
                         int idx = l * board->width + c;
-                        board->board[idx].content = 'P';
-                        board->board[idx].has_dot = 0;
+                        if (is_pacman) {
+                            board->board[idx].content = 'P';
+                            board->board[idx].has_dot = 0;
+                        } else {
+                            board->board[idx].content = 'M';
+                        }
                     }
                 }
             }
             else {
-                parse_move_line(linha, p->moves, &p->n_moves);
+                parse_move_line(linha, e_moves, e_n_moves);
             }
         }
         linha = strtok_r(NULL, "\n", &saveptr);
@@ -544,53 +563,6 @@ int load_pacman_filename(board_t *board, const char* filename, int index, int po
     free(buffer);
     return 0;
 }
-
-
-int load_ghost_filename(board_t *board, const char* filename, int index){
-    char *buffer = read_file_content(filename);
-    
-    ghost_t *g = &board->ghosts[index];
-
-    g->n_moves = 0;
-    g->current_move = 0;
-    g->waiting = 0;
-    g->charged = 0;
-    g->passo = 0;
-
-
-    char *saveptr; 
-    char *linha = strtok_r(buffer, "\n", &saveptr);
-
-    while(linha != NULL){
-        if(linha[0] != '#'){
-
-            if(strncmp(linha, "PASSO", 5) == 0){
-                int passo;
-                if(sscanf(linha, "PASSO %d", &passo) == 1){
-                    g->passo = passo;
-                    g->waiting = passo;
-                }
-            }
-            else if (strncmp(linha, "POS", 3) == 0){
-                int l, c;
-                if(sscanf(linha, "POS %d %d", &l, &c) == 2){
-                    g->pos_y = l;
-                    g->pos_x = c;
-                    if(is_valid_pos(board, c, l)){
-                        board->board[l * board->width + c].content = 'M';
-                    }
-                }
-            }
-            else {
-                parse_move_line(linha, g->moves, &g->n_moves);
-            }
-        }
-        linha = strtok_r(NULL, "\n", &saveptr);
-    }
-    free(buffer);
-    return 0;
-}
-
 
 void processar_entidades(board_t *board, char *linha, int tipo, int points) {
     char temp_name[50];
@@ -616,9 +588,9 @@ void processar_entidades(board_t *board, char *linha, int tipo, int points) {
     while (sscanf(cursor, "%s%n", temp_name, &offset) == 1) {
         
         if (tipo == 0) {
-            load_pacman_filename(board, temp_name, i, points); 
+            load_entity_file(board, temp_name, i, 1, points); 
         } else {
-            load_ghost_filename(board, temp_name, i);
+            load_entity_file(board, temp_name, i, 0, 0);
         }
         
         cursor += offset;

@@ -106,9 +106,7 @@ int is_valid_pos(board_t *board, int x, int y);
 
 int parse_move_line(char *linha, command_t *moves_array, int *n_moves);
 
-int load_pacman_filename(board_t *board, const char* filename, int index, int points);
-
-int load_ghost_filename(board_t *board, const char* filename, int index);
+int load_entity_file(board_t *board, const char* filename, int index, int is_pacman, int points);
 
 void processar_entidades(board_t *board, char *linha, int tipo, int points);
 
