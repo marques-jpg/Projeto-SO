@@ -96,6 +96,7 @@ int play_board(board_t * game_board) {
                             exit(1);
                         }
                     }
+                    
                     game_board->save_active = 0;
                     c.command = '\0'; 
                     return CONTINUE_PLAY; 
