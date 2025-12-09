@@ -1,7 +1,7 @@
 # Compiler variables
 CC = gcc
 CFLAGS = -g -Wall -Wextra -Werror -std=c17 -D_POSIX_C_SOURCE=200809L
-LDFLAGS = -lncurses
+LDFLAGS = -lncurses -pthread
 
 # Directory variables
 SRC_DIR = src
@@ -37,7 +37,7 @@ $(BIN_DIR)/$(TARGET): $(OBJS) | folders
 
 # run the program
 run: pacmanist
-	@./$(BIN_DIR)/$(TARGET)
+	@./$(BIN_DIR)/$(TARGET) files
 
 # Create folders
 folders:
