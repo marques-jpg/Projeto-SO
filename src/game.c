@@ -138,19 +138,21 @@ static void *pacman_thread(void *arg) {
         }
 
         pthread_mutex_lock(&state->mutex);
-        if (!state->running) {
-            pthread_mutex_unlock(&state->mutex);
-            break;
-        }
+        int is_running = state->running;
+        pthread_mutex_unlock(&state->mutex);
+        if (!is_running) break;
         
         int result = move_pacman(board, 0, cmd_ptr); 
         
-        if (result == REACHED_PORTAL) {
-            set_outcome(state, NEXT_LEVEL);
-        } else if (result == DEAD_PACMAN) {
-            set_outcome(state, QUIT_GAME);
+        if (result == REACHED_PORTAL || result == DEAD_PACMAN) {
+            pthread_mutex_lock(&state->mutex);
+            if (result == REACHED_PORTAL) {
+                set_outcome(state, NEXT_LEVEL);
+            } else if (result == DEAD_PACMAN) {
+                set_outcome(state, QUIT_GAME);
+            }
+            pthread_mutex_unlock(&state->mutex);
         }
-        pthread_mutex_unlock(&state->mutex);
 
         if (board->tempo != 0) {
             sleep_ms(board->tempo);
@@ -183,24 +185,23 @@ static void *ghost_thread(void *arg) {
         }
 
         int cmd_index = ghost->current_move % ghost->n_moves;
+
+        command_t *cmd_ptr = &ghost->moves[cmd_index]; 
         
         pthread_mutex_unlock(&state->mutex);
 
         pthread_mutex_lock(&state->mutex);
-        if (!state->running) {
-            pthread_mutex_unlock(&state->mutex);
-            break;
-        }
-
-        ghost = &board->ghosts[ghost_index];
-        command_t *cmd_ptr = &ghost->moves[cmd_index];
+        int is_running = state->running;
+        pthread_mutex_unlock(&state->mutex);
+        if (!is_running) break;
 
         int result = move_ghost(board, ghost_index, cmd_ptr);
         
         if (result == DEAD_PACMAN) {
+            pthread_mutex_lock(&state->mutex);
             set_outcome(state, QUIT_GAME);
+            pthread_mutex_unlock(&state->mutex);
         }
-        pthread_mutex_unlock(&state->mutex);
 
         if (board->tempo != 0) {
             sleep_ms(board->tempo);
@@ -381,6 +382,15 @@ int main(int argc, char** argv) {
                         exit(0);
                     }
                 }
+            }
+
+            if(i == n_niveis -1 && state.outcome == NEXT_LEVEL){
+                draw_board(&game_board, DRAW_WIN);
+                refresh_screen();
+                sleep_ms(2000);
+                game_over=true;
+            }else{
+                sleep_ms(game_board.tempo);
             }
 
             repeat_level = 0;

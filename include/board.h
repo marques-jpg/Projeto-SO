@@ -6,6 +6,8 @@
 #define MAX_FILENAME 256
 #define MAX_GHOSTS 25
 
+#include <pthread.h>
+
 typedef enum {
     REACHED_PORTAL = 1,
     VALID_MOVE = 0,
@@ -43,7 +45,8 @@ typedef struct {
 typedef struct {
     char content;   // stuff like 'P' for pacman 'M' for monster/ghost and 'W' for wall
     int has_dot;    // whether there is a dot in this position or not
-    int has_portal; // whether there is a portal in this position or not
+    int has_portal;
+    pthread_mutex_t mutex; // whether there is a portal in this position or not
 } board_pos_t;
 
 typedef struct {
