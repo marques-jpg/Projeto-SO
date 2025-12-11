@@ -34,6 +34,23 @@ static inline int is_valid_position(board_t* board, int x, int y) {
     return (x >= 0 && x < board->width) && (y >= 0 && y < board->height); // Inside of the board boundaries
 }
 
+static void find_first_free_pos(board_t* board, int* x, int* y) {
+    // Procura por uma posição que não seja Parede ('W') e não seja Portal.
+    for (int row = 0; row < board->height; row++) {
+        for (int col = 0; col < board->width; col++) {
+            int index = get_board_index(board, col, row);
+            char content = board->board[index].content;
+            int is_portal = board->board[index].has_portal;
+
+            if (content != 'W' && !is_portal) {
+                *x = col;
+                *y = row;
+                return;
+            }
+        }
+    }
+}
+
 void sleep_ms(int milliseconds) {
     struct timespec ts;
     ts.tv_sec = milliseconds / 1000;
@@ -338,9 +355,8 @@ void kill_pacman(board_t* board, int pacman_index) {
 
 // Static Loading
 int load_pacman(board_t* board, int points) {
-    board->board[1 * board->width + 1].content = 'P'; // Pacman
-    board->pacmans[0].pos_x = 1;
-    board->pacmans[0].pos_y = 1;
+    board->pacmans[0].pos_x = -1;
+    board->pacmans[0].pos_y = -1;
     board->pacmans[0].alive = 1;
     board->pacmans[0].points = points;
     return 0;
@@ -449,11 +465,11 @@ int is_valid_pos(board_t *board, int x, int y) {
     int idx = y * board->width + x;
     char pos = board->board[idx].content;
 
-    if (pos == 'W' || pos == 'M' || pos == 'P') return 0;
+    if (pos == 'M' || pos == 'P') return 0;
 
     return 1;
 }
-
+    
 int parse_move_line(char *linha, command_t *moves_array, int *n_moves) {
     if (*n_moves >= MAX_MOVES) return 0;
 
@@ -658,6 +674,16 @@ int load_level_filename(board_t *board, const char *filename, int points) {
         }
         linha = strtok_r(NULL, "\n", &saveptr);
     }
+        pacman_t *pac = board->pacmans;
+        if (pac->n_moves == 0 || (pac->pos_x == -1 && pac->pos_y == -1)) { 
+            find_first_free_pos(board, &pac->pos_x, &pac->pos_y);
+            int idx = pac->pos_y * board->width + pac->pos_x;
+            if (is_valid_position(board, pac->pos_x, pac->pos_y)) {
+                board->board[idx].content = 'P';
+            }
+        }
+
+
     free(buffer);
     return 0;
 }

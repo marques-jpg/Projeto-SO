@@ -176,7 +176,6 @@ static void *ghost_thread(void *arg) {
             continue;
         }
 
-        // CORREÇÃO: Calcular o índice do comando em vez de fazer uma cópia da estrutura
         int cmd_index = ghost->current_move % ghost->n_moves;
         
         pthread_mutex_unlock(&state->mutex);
@@ -187,8 +186,6 @@ static void *ghost_thread(void *arg) {
             break;
         }
 
-        // CORREÇÃO: Obter um ponteiro para o comando real dentro do array
-        // Isto garante que quando o move_ghost altera o 'turns_left', a alteração fica guardada.
         ghost = &board->ghosts[ghost_index];
         command_t *cmd_ptr = &ghost->moves[cmd_index];
 
